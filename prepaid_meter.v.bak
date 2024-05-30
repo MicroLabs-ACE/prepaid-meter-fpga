@@ -1,0 +1,80 @@
+module prepaid_meter (
+    input wire clk,                // Clock input
+    input wire reset,              // Reset input (SW0)
+    input wire sw1,                // Set 25 (SW1)
+    input wire sw2,                // Set 50 (SW2)
+    input wire sw3,                // Set 100 (SW3)
+    output wire [6:0] hex0,        // 7-segment display segments for digit 0
+    output wire [6:0] hex1,        // 7-segment display segments for digit 1
+    output wire [6:0] hex2,        // 7-segment display segments for digit 2
+    output wire [6:0] hex3         // 7-segment display segments for digit 3
+);
+
+    // Define the constants
+    parameter load_unit_25 = 25;
+    parameter load_unit_50 = 50;
+    parameter load_unit_100 = 100;
+
+    // Define the balance register
+    reg [15:0] balance = 0;
+
+    // Debounce the switches
+    reg sw1_prev = 0;
+    reg sw2_prev = 0;
+    reg sw3_prev = 0;
+
+    wire sw1_debounced;
+    wire sw2_debounced;
+    wire sw3_debounced;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            sw1_prev <= 0;
+            sw2_prev <= 0;
+            sw3_prev <= 0;
+        end else begin
+            sw1_prev <= sw1;
+            sw2_prev <= sw2;
+            sw3_prev <= sw3;
+        end
+    end
+
+    assign sw1_debounced = sw1 & ~sw1_prev;
+    assign sw2_debounced = sw2 & ~sw2_prev;
+    assign sw3_debounced = sw3 & ~sw3_prev;
+
+    // Update balance on switch press
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            balance <= 0;
+        end else begin
+            if (sw1_debounced) balance <= balance + load_unit_25;
+            if (sw2_debounced) balance <= balance + load_unit_50;
+            if (sw3_debounced) balance <= balance + load_unit_100;
+        end
+    end
+
+    // 7-segment display driver
+    function [6:0] seg_decoder;
+        input [3:0] digit;
+        case (digit)
+            4'd0: seg_decoder = 7'b1000000;
+            4'd1: seg_decoder = 7'b1111001;
+            4'd2: seg_decoder = 7'b0100100;
+            4'd3: seg_decoder = 7'b0110000;
+            4'd4: seg_decoder = 7'b0011001;
+            4'd5: seg_decoder = 7'b0010010;
+            4'd6: seg_decoder = 7'b0000010;
+            4'd7: seg_decoder = 7'b1111000;
+            4'd8: seg_decoder = 7'b0000000;
+            4'd9: seg_decoder = 7'b0010000;
+            default: seg_decoder = 7'b1111111; // Display off
+        endcase
+    endfunction
+
+    assign hex0 = seg_decoder(balance % 10);               // Units place
+    assign hex1 = seg_decoder((balance / 10) % 10);        // Tens place
+    assign hex2 = seg_decoder((balance / 100) % 10);       // Hundreds place
+    assign hex3 = seg_decoder((balance / 1000) % 10);      // Thousands place
+
+endmodule
